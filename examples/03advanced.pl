@@ -10,6 +10,21 @@ use URI::Find;
 augment pre_insert => sub {
     my ($self, $file_ref, $message_ref) = @_;
     
+    # skip "[#catalyst 00:42] JOIN: Fayland"
+    if ( $$message_ref =~ /\s+(JOIN|PART)\:\s+(\S+)$/ ) {
+        $$message_ref = '';
+    }
+    # skip [#catalyst 05:59] MODE: +o zamolxes by: Bender
+    if ( $$message_ref =~ /\s+MODE\:\s+\+[oi]/ ) {
+        $$message_ref = '';
+    }
+    # skip "[#catalyst 03:33] Action: *GumbyNET2 cpan.testers: FAIL Catalyst-View-Jemplate-0.06 i386-linux-thread-multi 2.4.21-27.0.2.elsmp perl-5.8.6 fayland@gmail.com ("Fayland Lam") #2416326"
+    if ( $$message_ref =~ /\s+cpan\.testers\:\s+FAIL/ ) {
+        $$message_ref = '';
+    }
+    
+    return unless ( length($$message_ref) );
+    
     # change filename
     $$file_ref .= '.html';
     
@@ -24,13 +39,20 @@ augment pre_insert => sub {
         }
     );
     $finder->find( $message_ref );
-    
-    $$message_ref .= "</br>";
+
+    # [#padre 20:25] Action: *Fayland read Kephra source code to see if there is something to borrow
+    if ( $$message_ref =~ /\s+Action\:\s+\S+/ ) {
+         $$message_ref =~ s/Action\:\s+/\<i\>/;
+         $$message_ref .= '</i>';
+    }
+
+    $$message_ref .= "<br />";
 };
 
 package IRC::Bot2;
 
 use Moose;
+require IRC::Bot;
 extends 'IRC::Bot';
 
 after 'bot_start' => sub {
@@ -46,6 +68,36 @@ after 'bot_start' => sub {
 
 package main;
 
+use Proc::ProcessTable;
+use File::Basename;
+sub check_cmd_run {
+
+    my $p = new Proc::ProcessTable( 'cache_ttys' => 1 );
+    my $all = $p->table;
+    my $pid = 0; # this file's pid
+    my $please_kill = 0;
+    foreach my $one (@$all) {
+        my $basename = basename($0);
+	if ( $one->cmndline =~ /perl/ and $one->state eq 'defunct' ) {
+		$please_kill = 1;
+	}
+        if ($one->cmndline =~ /$basename/ and $one->pid != $$) {
+	    $pid = $one->pid;
+	    last;
+        }
+    }
+    if ($pid and not $please_kill) {
+	return 1;
+    }
+    kill(9, $pid) if $pid;
+    return 0;
+}
+
+if ( check_cmd_run() ) {
+    print "$0 is on, exits\n";
+    exit;
+}
+
 # Initialize new object
 my $bot = IRC::Bot2->new(
     Debug    => 0,
@@ -55,8 +107,8 @@ my $bot = IRC::Bot2->new(
     Port     => '6667',
     Username => 'Fayland_Logger',
     Ircname  => 'Fayland_Logger',
-    Channels => [ '#fayland' ],
-    LogPath  => '/home/fayland/root/irclog/',
+    Channels => [ '#moose', '#catalyst', '#dbix-class', '#reaction', '#kiokudb', '#padre', '#mojo', '#parrot' ],
+    LogPath  => '/home/faylandfoorum/irclog.foorumbbs.com/',
     NSPass   => 'nickservpass'
 );
 
